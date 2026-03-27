@@ -11,16 +11,19 @@ class TestVerifyWebhookSignature:
         """Test that a valid HMAC-SHA256 signature passes verification."""
         import hmac
         import hashlib
-        
+
         payload = b'{"action": "opened"}'
         secret = "test_secret"
-        
-        signature = "sha256=" + hmac.new(
-            key=secret.encode("utf-8"),
-            msg=payload,
-            digestmod=hashlib.sha256,
-        ).hexdigest()
-        
+
+        signature = (
+            "sha256="
+            + hmac.new(
+                key=secret.encode("utf-8"),
+                msg=payload,
+                digestmod=hashlib.sha256,
+            ).hexdigest()
+        )
+
         result = verify_webhook_signature(payload, signature, secret)
         assert result is True
 
@@ -28,35 +31,38 @@ class TestVerifyWebhookSignature:
         """Test that an invalid signature fails verification."""
         payload = b'{"action": "opened"}'
         secret = "test_secret"
-        
+
         result = verify_webhook_signature(payload, "sha256=invalid", secret)
         assert result is False
 
     def test_empty_signature(self):
         """Test that empty signature fails verification."""
-        result = verify_webhook_signature(b'{}', "", "secret")
+        result = verify_webhook_signature(b"{}", "", "secret")
         assert result is False
 
     def test_missing_sha256_prefix(self):
         """Test that signature without sha256= prefix fails."""
-        result = verify_webhook_signature(b'{}', "abc123", "secret")
+        result = verify_webhook_signature(b"{}", "abc123", "secret")
         assert result is False
 
     def test_wrong_secret(self):
         """Test that signature with wrong secret fails."""
         import hmac
         import hashlib
-        
+
         payload = b'{"action": "opened"}'
         correct_secret = "correct_secret"
         wrong_secret = "wrong_secret"
-        
-        signature = "sha256=" + hmac.new(
-            key=correct_secret.encode("utf-8"),
-            msg=payload,
-            digestmod=hashlib.sha256,
-        ).hexdigest()
-        
+
+        signature = (
+            "sha256="
+            + hmac.new(
+                key=correct_secret.encode("utf-8"),
+                msg=payload,
+                digestmod=hashlib.sha256,
+            ).hexdigest()
+        )
+
         result = verify_webhook_signature(payload, signature, wrong_secret)
         assert result is False
 
@@ -77,9 +83,9 @@ class TestParseWebhookPayload:
                 "owner": {"login": "owner"},
             },
         }
-        
+
         result = parse_webhook_payload(payload)
-        
+
         assert result is not None
         assert result["repo_owner"] == "owner"
         assert result["repo_name"] == "repo"
@@ -99,9 +105,9 @@ class TestParseWebhookPayload:
                 "owner": {"login": "user"},
             },
         }
-        
+
         result = parse_webhook_payload(payload)
-        
+
         assert result is not None
         assert result["action"] == "synchronize"
         assert result["pr_number"] == 456
@@ -113,7 +119,7 @@ class TestParseWebhookPayload:
             "pull_request": {"number": 123},
             "repository": {"name": "repo", "owner": {"login": "owner"}},
         }
-        
+
         result = parse_webhook_payload(payload)
         assert result is None
 
@@ -125,7 +131,7 @@ class TestParseWebhookPayload:
                 "pull_request": {"number": 123},
                 "repository": {"name": "repo", "owner": {"login": "owner"}},
             }
-            
+
             result = parse_webhook_payload(payload)
             assert result is None, f"Action '{action}' should be ignored"
 
@@ -135,7 +141,7 @@ class TestParseWebhookPayload:
             "action": "opened",
             "repository": {"name": "repo", "owner": {"login": "owner"}},
         }
-        
+
         result = parse_webhook_payload(payload)
         assert result is None
 
@@ -145,7 +151,7 @@ class TestParseWebhookPayload:
             "action": "opened",
             "pull_request": {"number": 123},
         }
-        
+
         result = parse_webhook_payload(payload)
         assert result is None
 
@@ -156,6 +162,6 @@ class TestParseWebhookPayload:
             "pull_request": {"number": 123, "html_url": "http://example.com"},
             "repository": {"name": "repo"},
         }
-        
+
         result = parse_webhook_payload(payload)
         assert result is None

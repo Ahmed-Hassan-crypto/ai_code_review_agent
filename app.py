@@ -13,7 +13,8 @@ st.set_page_config(
 )
 
 # Styles
-st.markdown("""
+st.markdown(
+    """
 <style>
     .main .block-container {
         max-width: 900px;
@@ -42,21 +43,28 @@ st.markdown("""
         font-weight: bold;
     }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 # Check for deployed API URL or use localhost
-DEPLOYED_API = None  # Set to your Render URL when deployed, e.g., "https://your-app.onrender.com"
+DEPLOYED_API = (
+    None  # Set to your Render URL when deployed, e.g., "https://your-app.onrender.com"
+)
 API_URL = DEPLOYED_API if DEPLOYED_API else "http://localhost:8000"
 
 
 # Header
-st.markdown("""
+st.markdown(
+    """
 <div class="hero-title">
     <h1>🔍 AI Code Review Agent</h1>
     <p>Automated code reviews powered by AI</p>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 st.divider()
 
@@ -115,14 +123,16 @@ if "review_data" in st.session_state:
     # Score Overview
     overall = data.get("overall_score", 0)
     score_emoji = "✅" if overall >= 7 else "⚠️" if overall >= 5 else "❌"
-    
+
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Overall Score", f"{overall}/10")
     with col2:
         st.metric("Files Reviewed", len(data.get("scores", [])))
     with col3:
-        total_issues = sum(len(r.get("lint_issues", [])) for r in data.get("lint_results", []))
+        total_issues = sum(
+            len(r.get("lint_issues", [])) for r in data.get("lint_results", [])
+        )
         st.metric("Issues Found", total_issues)
 
     st.divider()
@@ -146,7 +156,7 @@ if "review_data" in st.session_state:
 
     # Per-File Results
     st.subheader("📂 File Reviews")
-    
+
     scores = data.get("scores", [])
     lint_results = data.get("lint_results", [])
     fix_suggestions = data.get("fix_suggestions", [])
@@ -162,20 +172,24 @@ if "review_data" in st.session_state:
 
             # Tabs
             tab1, tab2, tab3 = st.tabs(["Issues", "Fixes", "Raw"])
-            
+
             with tab1:
                 fl = next((r for r in lint_results if r.get("filename") == fname), {})
                 issues = fl.get("lint_issues", [])
                 if issues:
                     for i in issues:
-                        st.markdown(f"- **{i.get('severity', '')}** Line {i.get('line', '?')}: {i.get('message', '')}")
+                        st.markdown(
+                            f"- **{i.get('severity', '')}** Line {i.get('line', '?')}: {i.get('message', '')}"
+                        )
                         if i.get("suggestion"):
                             st.caption(f"💡 {i['suggestion']}")
                 else:
                     st.success("No issues")
-            
+
             with tab2:
-                ff = next((r for r in fix_suggestions if r.get("filename") == fname), {})
+                ff = next(
+                    (r for r in fix_suggestions if r.get("filename") == fname), {}
+                )
                 fixes = ff.get("fixes", [])
                 if fixes:
                     for f in fixes:
@@ -188,7 +202,7 @@ if "review_data" in st.session_state:
                                 st.code(f["fixed_code"], language="python")
                 else:
                     st.success("No fixes needed")
-            
+
             with tab3:
                 st.json(s)
 
@@ -198,8 +212,11 @@ if "review_data" in st.session_state:
 
 # Footer
 st.divider()
-st.markdown("""
+st.markdown(
+    """
 <div style="text-align: center; color: #888; padding: 20px;">
     <p>Powered by LangGraph + Groq</p>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)

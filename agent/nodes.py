@@ -87,14 +87,14 @@ def combined_review(state: dict) -> dict:
     # Process all files with a more detailed prompt
     all_lint = []
     all_security = []
-    
+
     # Process in batches of 3 to avoid token limits
     batch_size = 3
     for i in range(0, len(files), batch_size):
-        batch = files[i:i+batch_size]
-        
+        batch = files[i : i + batch_size]
+
         file_contexts = "\n\n---\n\n".join(_build_file_context(f) for f in batch)
-        
+
         prompt = f"""You are a senior security engineer and code reviewer. 
 Analyze this code diff and provide detailed findings in JSON format.
 
@@ -118,11 +118,16 @@ Also include a "security_summary" field with overall security assessment.
 Example format:
 {{"lint": [{{"filename": "auth.py", "severity": "HIGH", "line": 15, "message": "SQL injection", "suggestion": "Use parameterized queries"}}], "security": [{{"filename": "auth.py", "severity": "CRITICAL", "line": 10, "message": "Hardcoded password", "suggestion": "Use environment variables"}}, {{"filename": "auth.py", "severity": "HIGH", "line": 25, "message": "Missing authentication check", "suggestion": "Add auth validation"}}, ...]}}"""
 
-        response = _invoke_with_retry([
-            {"role": "system", "content": "You are a senior code reviewer. Provide detailed findings. Respond ONLY with valid JSON."},
-            {"role": "human", "content": prompt},
-        ])
-        
+        response = _invoke_with_retry(
+            [
+                {
+                    "role": "system",
+                    "content": "You are a senior code reviewer. Provide detailed findings. Respond ONLY with valid JSON.",
+                },
+                {"role": "human", "content": prompt},
+            ]
+        )
+
         if response:
             results = _parse_json_response(response.content)
             if isinstance(results, dict):
@@ -135,25 +140,33 @@ Example format:
     lint_results = []
     for file_data in files:
         file_lint = [i for i in all_lint if i.get("filename") == file_data["filename"]]
-        lint_results.append({"filename": file_data["filename"], "lint_issues": file_lint})
+        lint_results.append(
+            {"filename": file_data["filename"], "lint_issues": file_lint}
+        )
 
     logic_results = []
     for file_data in files:
-        file_sec = [i for i in all_security if i.get("filename") == file_data["filename"]]
-        
+        file_sec = [
+            i for i in all_security if i.get("filename") == file_data["filename"]
+        ]
+
         # Build detailed security review text
         if file_sec:
             review_lines = [f"Found {len(file_sec)} security issue(s):\n"]
             for issue in file_sec:
                 sev = issue.get("severity", "INFO")
-                review_lines.append(f"- **{sev}** Line {issue.get('line', '?')}: {issue.get('message', '')}")
+                review_lines.append(
+                    f"- **{sev}** Line {issue.get('line', '?')}: {issue.get('message', '')}"
+                )
                 if issue.get("suggestion"):
                     review_lines.append(f"  Fix: {issue['suggestion']}")
             logic_review = "\n".join(review_lines)
         else:
             logic_review = "No security issues found."
-            
-        logic_results.append({"filename": file_data["filename"], "logic_review": logic_review})
+
+        logic_results.append(
+            {"filename": file_data["filename"], "logic_review": logic_review}
+        )
 
     return {"lint_results": lint_results, "logic_results": logic_results}
 
@@ -172,43 +185,53 @@ def combined_fixes_and_score(state: dict) -> dict:
     # Calculate scores based on actual issues found
     fix_suggestions = []
     scores = []
-    
+
     for file_data in files:
         fname = file_data["filename"]
-        
+
         # Get lint issues for this file
         f_lint = next((r for r in lint_results if r["filename"] == fname), {})
         lint_issues = f_lint.get("lint_issues", [])
-        
+
         # Get security issues for this file
         f_logic = next((r for r in logic_results if r["filename"] == fname), {})
         logic_text = f_logic.get("logic_review", "")
-        
+
         # Count issues
         num_lint = len(lint_issues)
         num_security = 0
-        if logic_text and "No security issues" not in logic_text and "Found 0" not in logic_text:
+        if (
+            logic_text
+            and "No security issues" not in logic_text
+            and "Found 0" not in logic_text
+        ):
             # Parse security issues count from logic_review
             import re
+
             match = re.search(r"Found (\d+)", logic_text)
             if match:
                 num_security = int(match.group(1))
-        
+
         # Calculate score based on issues
         # Start with 10, deduct points for issues
         base_score = 10
-        
+
         # Deduct for critical issues
         critical_count = sum(1 for i in lint_issues if i.get("severity") == "CRITICAL")
         high_count = sum(1 for i in lint_issues if i.get("severity") == "HIGH")
         medium_count = sum(1 for i in lint_issues if i.get("severity") == "MEDIUM")
-        
+
         # Apply penalties
-        deductions = (critical_count * 3) + (high_count * 2) + (medium_count * 1) + (num_security * 2)
-        
+        deductions = (
+            (critical_count * 3)
+            + (high_count * 2)
+            + (medium_count * 1)
+            + (num_security * 2)
+        )
+
         # Calculate final score (minimum 1)
         score = max(1, base_score - deductions)
-        
+
         # Generate justification
         if score >= 8:
             justification = f"Clean code, {num_lint} lint issue(s), {num_security} security issue(s)"
@@ -218,31 +241,39 @@ def combined_fixes_and_score(state: dict) -> dict:
             justification = f"Several issues - {num_lint} lint, {num_security} security. Requires attention."
         else:
             justification = f"Multiple critical issues - {num_lint} lint, {num_security} security. Needs major fixes."
-        
-        scores.append({
-            "filename": fname,
-            "score": score,
-            "justification": justification,
-            "issues_count": num_lint + num_security,
-        })
-        
+
+        scores.append(
+            {
+                "filename": fname,
+                "score": score,
+                "justification": justification,
+                "issues_count": num_lint + num_security,
+            }
+        )
+
         # Generate fixes based on issues
         fixes = []
-        
+
         # Create fixes for lint issues
         for issue in lint_issues:
-            fixes.append({
-                "issue_title": f"Fix: {issue.get('message', 'Issue')[:50]}",
-                "severity": issue.get("severity", "MEDIUM"),
-                "original_code": "Code with issue (see line " + str(issue.get("line", "?")) + ")",
-                "fixed_code": issue.get("suggestion", "Fixed code"),
-                "explanation": f"Line {issue.get('line', '?')}: {issue.get('message', '')}"
-            })
-        
-        fix_suggestions.append({
-            "filename": fname,
-            "fixes": fixes,
-        })
+            fixes.append(
+                {
+                    "issue_title": f"Fix: {issue.get('message', 'Issue')[:50]}",
+                    "severity": issue.get("severity", "MEDIUM"),
+                    "original_code": "Code with issue (see line "
+                    + str(issue.get("line", "?"))
+                    + ")",
+                    "fixed_code": issue.get("suggestion", "Fixed code"),
+                    "explanation": f"Line {issue.get('line', '?')}: {issue.get('message', '')}",
+                }
+            )
+
+        fix_suggestions.append(
+            {
+                "filename": fname,
+                "fixes": fixes,
+            }
+        )
 
     return {"fix_suggestions": fix_suggestions, "scores": scores}
 
@@ -277,7 +308,7 @@ def format_review(state: dict) -> dict:
     fix_suggestions = state.get("fix_suggestions", [])
 
     overall = sum(s["score"] for s in scores) / len(scores) if scores else 0
-    
+
     # Determine overall status emoji
     if overall >= 8:
         status_emoji = "✅"
@@ -301,7 +332,7 @@ def format_review(state: dict) -> dict:
     # Summary of issues
     total_lint = sum(len(r.get("lint_issues", [])) for r in lint_results)
     total_fixes = sum(len(r.get("fixes", [])) for r in fix_suggestions)
-    
+
     if total_lint > 0 or total_fixes > 0:
         lines.append("### 📊 Summary")
         lines.append(f"- **Total Issues Found:** {total_lint}")
@@ -314,7 +345,7 @@ def format_review(state: dict) -> dict:
         fname = score_data["filename"]
         fscore = score_data["score"]
         justification = score_data.get("justification", "No justification provided")
-        
+
         # File header
         if fscore >= 8:
             file_emoji = "✅"
@@ -322,7 +353,7 @@ def format_review(state: dict) -> dict:
             file_emoji = "⚠️"
         else:
             file_emoji = "❌"
-        
+
         lines.append(f"### {file_emoji} `{fname}`")
         lines.append(f"**Score:** {fscore}/10")
         lines.append(f"**Rating:** {justification}")
@@ -331,7 +362,7 @@ def format_review(state: dict) -> dict:
         # Lint Issues
         file_lint = next((r for r in lint_results if r["filename"] == fname), {})
         lint_issues = file_lint.get("lint_issues", [])
-        
+
         if lint_issues:
             lines.append("#### 🧹 Lint Issues Found")
             for issue in lint_issues:
@@ -339,8 +370,12 @@ def format_review(state: dict) -> dict:
                 line = issue.get("line", "?")
                 message = issue.get("message", "")
                 suggestion = issue.get("suggestion", "")
-                
-                sev_emoji = "🔴" if severity == "ERROR" else ("🟡" if severity == "WARNING" else "ℹ️")
+
+                sev_emoji = (
+                    "🔴"
+                    if severity == "ERROR"
+                    else ("🟡" if severity == "WARNING" else "ℹ️")
+                )
                 lines.append(f"- {sev_emoji} **{severity}** at Line {line}: {message}")
                 if suggestion:
                     lines.append(f"  > 💡 Suggestion: {suggestion}")
@@ -349,7 +384,7 @@ def format_review(state: dict) -> dict:
         # Security/Logic Review
         file_logic = next((r for r in logic_results if r["filename"] == fname), {})
         logic_text = file_logic.get("logic_review", "")
-        
+
         if logic_text:
             lines.append("#### 🛡️ Security & Logic Review")
             # Clean and truncate long text
@@ -361,7 +396,7 @@ def format_review(state: dict) -> dict:
         # Suggested Fixes
         file_fixes = next((r for r in fix_suggestions if r["filename"] == fname), {})
         fixes = file_fixes.get("fixes", [])
-        
+
         if fixes:
             lines.append("#### 🔧 Suggested Fixes")
             for fix in fixes:
@@ -370,7 +405,7 @@ def format_review(state: dict) -> dict:
                 original = fix.get("original_code", "")
                 fixed = fix.get("fixed_code", "")
                 explanation = fix.get("explanation", "")
-                
+
                 lines.append(f"**{title}** ({severity})")
                 if original and fixed:
                     lines.append("```diff")
@@ -380,7 +415,7 @@ def format_review(state: dict) -> dict:
                 if explanation:
                     lines.append(f"> {explanation}")
                 lines.append("")
-        
+
         if not lint_issues and not logic_text and not fixes:
             lines.append("✅ No issues found in this file.")
             lines.append("")
@@ -392,10 +427,12 @@ def format_review(state: dict) -> dict:
     lines.append("*This review was automatically generated by AI Code Review Agent.*")
 
     final_review = "\n".join(lines)
-    
+
     # Truncate if too long for GitHub (65536 chars max)
     if len(final_review) > 60000:
-        final_review = final_review[:60000] + "\n\n... *(Review truncated - too many findings)*"
+        final_review = (
+            final_review[:60000] + "\n\n... *(Review truncated - too many findings)*"
+        )
 
     return {"final_review": final_review, "overall_score": round(overall, 1)}
 
@@ -407,43 +444,45 @@ def post_review(state: dict) -> dict:
     import requests
     import os
     from datetime import datetime
-    
+
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
-    
+
     print("=" * 50)
     print("POST REVIEW NODE EXECUTED")
     print("=" * 50)
-    
+
     github_token = os.getenv("GITHUB_TOKEN")
     print(f"GitHub Token present: {bool(github_token)}")
-    print(f"Token value: {github_token[:10]}... if exists" if github_token else "No token")
-    
+    print(
+        f"Token value: {github_token[:10]}... if exists" if github_token else "No token"
+    )
+
     if not github_token or github_token == "your_github_token_here":
         print("ERROR: No GitHub token or placeholder token!")
         return {"comment_posted": False, "reason": "No GitHub token configured"}
-    
+
     try:
         # Get full review content
         final_review = state.get("final_review", "")
         overall = state.get("overall_score", 0)
-        
+
         print(f"Final review length: {len(final_review)}")
         print(f"Overall score: {overall}")
-        
+
         if not final_review:
             print("ERROR: No final review content!")
             return {"comment_posted": False, "reason": "No review content"}
-        
+
         # Save markdown file locally
         pr_title = state.get("pr_title", "Review").replace(" ", "_")[:30]
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"ai_review_{pr_title}_{timestamp}.md"
-        
+
         reviews_dir = "reviews"
         os.makedirs(reviews_dir, exist_ok=True)
         filepath = os.path.join(reviews_dir, filename)
-        
+
         # Write full markdown file
         full_md = f"""# 🔍 AI Code Review Report
 
@@ -461,19 +500,19 @@ def post_review(state: dict) -> dict:
 *Generated by AI Code Review Agent*
 *Full review saved to: {filename}*
 """
-        
+
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(full_md)
-        
+
         print(f"Saved review to {filepath}")
-        
+
         # Post the FULL detailed review to GitHub
         # Truncate if needed (GitHub has 65536 char limit per comment)
         if len(final_review) > 60000:
             review_to_post = final_review[:60000] + "\n\n... *(Full review truncated)*"
         else:
             review_to_post = final_review
-        
+
         # Build comment with header + full review
         header = f"""## 🔍 AI Code Review Report
 
@@ -483,38 +522,40 @@ def post_review(state: dict) -> dict:
 
 ---
 """
-        
+
         full_comment = header + review_to_post + f"""
 
 ---
 *Full markdown review saved to: `{filename}`*
 *Generated by AI Code Review Agent*"""
-        
+
         print(f"Comment length: {len(full_comment)}")
         print("Posting to GitHub...")
-        
+
         # Post to GitHub
         session = requests.Session()
-        session.headers.update({
-            "Authorization": f"token {github_token}",
-            "Accept": "application/vnd.github.v3+json",
-        })
-        
+        session.headers.update(
+            {
+                "Authorization": f"token {github_token}",
+                "Accept": "application/vnd.github.v3+json",
+            }
+        )
+
         url = f"https://api.github.com/repos/{state['repo_owner']}/{state['repo_name']}/issues/{state['pr_number']}/comments"
         print(f"URL: {url}")
-        
+
         resp = session.post(url, json={"body": full_comment}, timeout=30)
-        
+
         print(f"Response status: {resp.status_code}")
         print(f"Response text: {resp.text[:200] if resp.text else 'No response'}")
-        
+
         if resp.status_code == 201:
             print(f"SUCCESS: Posted FULL review comment to PR #{state['pr_number']}")
             return {"comment_posted": True, "markdown_file": filename}
         else:
             print(f"ERROR: Failed to post - {resp.status_code}")
             return {"comment_posted": False, "reason": f"API error: {resp.status_code}"}
-            
+
     except Exception as e:
         print(f"EXCEPTION: {str(e)}")
         logger.error(f"Error posting review: {str(e)}")

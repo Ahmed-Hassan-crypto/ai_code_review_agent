@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -35,13 +36,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AI Code Review Agent API",
-    description="Automated code review powered by LangGraph and Google Gemini. "
+    title="AI Code Review Agent",
+    description="Automated code review powered by LangGraph and Groq. "
     "Submit GitHub PR URLs to receive comprehensive code reviews including "
     "lint issues, security vulnerabilities, and suggested fixes.",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
+    docs_url="/api-docs",
     redoc_url="/redoc",
     openapi_tags=[
         {"name": "Health", "description": "Health check endpoints"},
@@ -84,7 +85,7 @@ async def run_review(pr_url: str) -> dict:
     }
 
     result = await asyncio.to_thread(review_graph.invoke, initial_state)
-    
+
     # Store result
     key = f"{result.get('repo_owner', '')}/{result.get('repo_name', '')}#{result.get('pr_number', 0)}"
     review_store[key] = {
@@ -102,6 +103,251 @@ async def run_review(pr_url: str) -> dict:
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    """Root page - show the Streamlit UI interface."""
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>AI Code Review Agent</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+            }
+            .container {
+                background: white;
+                border-radius: 20px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                padding: 40px;
+                max-width: 600px;
+                width: 100%;
+            }
+            .logo {
+                font-size: 48px;
+                text-align: center;
+                margin-bottom: 20px;
+            }
+            h1 {
+                color: #333;
+                text-align: center;
+                margin-bottom: 10px;
+                font-size: 28px;
+            }
+            .subtitle {
+                text-align: center;
+                color: #666;
+                margin-bottom: 30px;
+            }
+            .form-group {
+                margin-bottom: 20px;
+            }
+            label {
+                display: block;
+                color: #333;
+                margin-bottom: 8px;
+                font-weight: 500;
+            }
+            input[type="text"] {
+                width: 100%;
+                padding: 15px;
+                border: 2px solid #e0e0e0;
+                border-radius: 10px;
+                font-size: 16px;
+                transition: border-color 0.3s;
+            }
+            input[type="text"]:focus {
+                outline: none;
+                border-color: #667eea;
+            }
+            button {
+                width: 100%;
+                padding: 15px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                border: none;
+                border-radius: 10px;
+                font-size: 16px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: transform 0.2s;
+            }
+            button:hover {
+                transform: translateY(-2px);
+            }
+            .result {
+                margin-top: 30px;
+                padding: 20px;
+                background: #f8f9fa;
+                border-radius: 10px;
+                display: none;
+            }
+            .result.show {
+                display: block;
+            }
+            .score {
+                font-size: 48px;
+                font-weight: bold;
+                text-align: center;
+                margin: 20px 0;
+            }
+            .score.high { color: #28a745; }
+            .score.medium { color: #ffc107; }
+            .score.low { color: #dc3545; }
+            .badge {
+                display: inline-block;
+                padding: 5px 15px;
+                border-radius: 20px;
+                font-size: 14px;
+                font-weight: 600;
+                margin: 5px;
+            }
+            .badge.pass { background: #d4edda; color: #155724; }
+            .badge.warn { background: #fff3cd; color: #856404; }
+            .badge.fail { background: #f8d7da; color: #721c24; }
+            .footer {
+                text-align: center;
+                margin-top: 30px;
+                color: #999;
+                font-size: 14px;
+            }
+            .loading {
+                text-align: center;
+                padding: 20px;
+            }
+            .spinner {
+                border: 3px solid #f3f3f3;
+                border-top: 3px solid #667eea;
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+                margin: 0 auto;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="logo">🔍</div>
+            <h1>AI Code Review Agent</h1>
+            <p class="subtitle">Automated code reviews powered by LangGraph + Groq</p>
+            
+            <div class="form-group">
+                <label for="prUrl">GitHub Pull Request URL</label>
+                <input type="text" id="prUrl" placeholder="https://github.com/owner/repo/pull/123">
+            </div>
+            
+            <button onclick="submitReview()">Review PR</button>
+            
+            <div id="loading" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p style="margin-top: 15px;">Analyzing code...</p>
+            </div>
+            
+            <div id="result" class="result">
+                <h2 style="text-align: center; margin-bottom: 10px;">Review Complete!</h2>
+                <div id="scoreDisplay" class="score">0/10</div>
+                <div id="statusBadge" class="badge">-</div>
+                
+                <div id="filesList" style="margin-top: 20px;"></div>
+            </div>
+            
+            <div class="footer">
+                Powered by LangGraph • Groq LLM • FastAPI
+            </div>
+        </div>
+        
+        <script>
+            async function submitReview() {
+                const prUrl = document.getElementById('prUrl').value;
+                if (!prUrl) {
+                    alert('Please enter a GitHub PR URL');
+                    return;
+                }
+                
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('result').classList.remove('show');
+                
+                try {
+                    const apiUrl = window.location.origin;
+                    const response = await fetch(apiUrl + '/review', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ pr_url: prUrl })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        showResult(data);
+                    } else {
+                        alert('Error: ' + (data.detail || 'Failed to review'));
+                    }
+                } catch (error) {
+                    alert('Error: ' + error.message);
+                }
+                
+                document.getElementById('loading').style.display = 'none';
+            }
+            
+            function showResult(data) {
+                const resultDiv = document.getElementById('result');
+                const score = data.overall_score || 0;
+                
+                document.getElementById('scoreDisplay').textContent = score + '/10';
+                document.getElementById('scoreDisplay').className = 'score ' + (score >= 7 ? 'high' : score >= 5 ? 'medium' : 'low');
+                
+                const statusBadge = document.getElementById('statusBadge');
+                if (score >= 7) {
+                    statusBadge.textContent = '✅ PASSED';
+                    statusBadge.className = 'badge pass';
+                } else if (score >= 5) {
+                    statusBadge.textContent = '⚠️ NEEDS WORK';
+                    statusBadge.className = 'badge warn';
+                } else {
+                    statusBadge.textContent = '❌ FAILED';
+                    statusBadge.className = 'badge fail';
+                }
+                
+                // Show files
+                const filesList = document.getElementById('filesList');
+                const scores = data.scores || [];
+                
+                if (scores.length > 0) {
+                    let html = '<h3>Files Reviewed:</h3>';
+                    scores.forEach(s => {
+                        const icon = s.score >= 7 ? '✅' : s.score >= 5 ? '⚠️' : '❌';
+                        html += '<div style="padding: 10px; margin: 5px 0; background: white; border-radius: 8px;">' + icon + ' <strong>' + s.filename + '</strong> - ' + s.score + '/10</div>';
+                    });
+                    filesList.innerHTML = html;
+                }
+                
+                resultDiv.classList.add('show');
+            }
+        </script>
+    </body>
+    </html>
+    """
+    return html_content
+
+
 @app.get("/health")
 async def health():
     """Health check."""
@@ -111,7 +357,7 @@ async def health():
 @app.post("/review")
 async def trigger_review(request: ReviewRequest):
     """Manually trigger a code review for a GitHub PR.
-    
+
     Body: { "pr_url": "https://github.com/owner/repo/pull/123" }
     """
     try:
@@ -144,7 +390,7 @@ async def github_webhook(request: Request):
             raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
     payload = await request.json()
-    
+
     # Parse the webhook event
     parsed = parse_webhook_payload(payload)
     if parsed is None:
@@ -166,5 +412,7 @@ async def get_review(owner: str, repo: str, pr_number: int):
     """Fetch a cached review result."""
     key = f"{owner}/{repo}#{pr_number}"
     if key not in review_store:
-        raise HTTPException(status_code=404, detail="Review not found. Trigger a review first.")
+        raise HTTPException(
+            status_code=404, detail="Review not found. Trigger a review first."
+        )
     return review_store[key]

@@ -14,7 +14,7 @@ from agent.nodes import (
 def build_review_graph():
     """Optimized fast flow:
     fetch_diff → combined_review → combined_fixes → format_review → post_review
-    
+
     Only 3 LLM calls instead of 6!
     """
     graph = StateGraph(AgentState)
