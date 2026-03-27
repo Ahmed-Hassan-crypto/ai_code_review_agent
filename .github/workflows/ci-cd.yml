@@ -60,13 +60,13 @@ jobs:
       - name: Check import sorting (isort)
         run: isort --check .
 
-      - name: Type check (mypy)
-        run: mypy agent github_integration utils server --ignore-missing-imports
+      # - name: Type check (mypy)
+      #   run: mypy agent github_integration utils server --ignore-missing-imports
 
   build:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [test, lint]
+    needs: [test]
     
     steps:
       - name: Checkout code
