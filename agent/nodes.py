@@ -1,15 +1,17 @@
 """LangGraph nodes for the AI Code Review Agent - Optimized for Speed."""
 
 import json
-import re
 import os
+import re
+
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
+
 from agent.prompts import (
-    SENIOR_SECURITY_ENGINEER_PROMPT,
-    LINTER_PROMPT,
     CODE_FIXER_PROMPT,
+    LINTER_PROMPT,
     SCORER_PROMPT,
+    SENIOR_SECURITY_ENGINEER_PROMPT,
 )
 from github_integration.pr_handler import fetch_pr_diff, post_review_comment
 
@@ -441,9 +443,10 @@ def format_review(state: dict) -> dict:
 def post_review(state: dict) -> dict:
     """Post FULL review to GitHub - saves markdown file and posts complete review."""
     import logging
-    import requests
     import os
     from datetime import datetime
+
+    import requests
 
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)

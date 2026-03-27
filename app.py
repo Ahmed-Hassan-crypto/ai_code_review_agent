@@ -1,7 +1,8 @@
 """AI Code Review Agent — Streamlit Frontend"""
 
-import streamlit as st
 import requests
+import streamlit as st
+
 from utils.pdf_report import generate_review_pdf
 
 # Page Config

@@ -1,7 +1,8 @@
 """Tests for GitHub webhook verification and parsing."""
 
 import pytest
-from github_integration.webhook import verify_webhook_signature, parse_webhook_payload
+
+from github_integration.webhook import parse_webhook_payload, verify_webhook_signature
 
 
 class TestVerifyWebhookSignature:
@@ -9,8 +10,8 @@ class TestVerifyWebhookSignature:
 
     def test_valid_signature(self):
         """Test that a valid HMAC-SHA256 signature passes verification."""
-        import hmac
         import hashlib
+        import hmac
 
         payload = b'{"action": "opened"}'
         secret = "test_secret"
@@ -47,8 +48,8 @@ class TestVerifyWebhookSignature:
 
     def test_wrong_secret(self):
         """Test that signature with wrong secret fails."""
-        import hmac
         import hashlib
+        import hmac
 
         payload = b'{"action": "opened"}'
         correct_secret = "correct_secret"

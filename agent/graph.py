@@ -1,14 +1,15 @@
 """LangGraph graph - Optimized for Speed."""
 
-from langgraph.graph import StateGraph, START, END
-from agent.state import AgentState
+from langgraph.graph import END, START, StateGraph
+
 from agent.nodes import (
-    fetch_diff,
-    combined_review,
     combined_fixes_and_score,
+    combined_review,
+    fetch_diff,
     format_review,
     post_review,
 )
+from agent.state import AgentState
 
 
 def build_review_graph():

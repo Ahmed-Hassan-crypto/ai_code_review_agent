@@ -1,7 +1,7 @@
 """LangGraph state schema for the AI Code Review Agent."""
 
-from typing import TypedDict, Annotated
 import operator
+from typing import Annotated, TypedDict
 
 
 class FileReview(TypedDict):

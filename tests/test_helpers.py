@@ -1,6 +1,7 @@
 """Tests for the helper utilities."""
 
 import pytest
+
 from utils.helpers import truncate
 
 
