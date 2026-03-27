@@ -1,0 +1,14 @@
+streamlit
+langgraph
+langchain-groq
+PyGithub
+fastapi
+uvicorn
+python-dotenv
+requests
+fpdf2
+pytest
+black
+isort
+mypy
+pytest-cov

@@ -1,0 +1,97 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio
+
+      - name: Run tests
+        run: pytest --cov=agent --cov=github_integration --cov=utils --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install linting tools
+        run: |
+          pip install black isort mypy
+
+      - name: Check code formatting (Black)
+        run: black --check .
+
+      - name: Check import sorting (isort)
+        run: isort --check .
+
+      - name: Type check (mypy)
+        run: mypy agent github_integration utils server --ignore-missing-imports
+
+  build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: ai-code-review-agent:latest
+
+  deploy:
+    name: Deploy (Production)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [build]
+    environment: production
+    
+    steps:
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production..."
+          # Add your deployment commands here
+          # e.g., kubectl apply -f k8s/ or similar
