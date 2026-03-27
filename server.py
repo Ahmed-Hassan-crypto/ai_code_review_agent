@@ -267,6 +267,14 @@ async def root():
                 <div id="statusBadge" class="badge">-</div>
                 
                 <div id="filesList" style="margin-top: 20px;"></div>
+                
+                <div id="githubMessage" style="margin-top: 20px; padding: 15px; background: #d4edda; border-radius: 10px; display: none;">
+                    <p style="color: #155724; font-weight: 600;">✅ Review report added to GitHub PR comment!</p>
+                </div>
+                
+                <div id="downloadSection" style="margin-top: 20px; text-align: center; display: none;">
+                    <button id="downloadPdfBtn" onclick="downloadPDF()" style="background: #28a745; margin-top: 10px;">📥 Download PDF Report</button>
+                </div>
             </div>
             
             <div class="footer">
@@ -297,6 +305,15 @@ async def root():
                     
                     if (response.ok) {
                         showResult(data);
+                        
+                        // Show GitHub message
+                        document.getElementById('githubMessage').style.display = 'block';
+                        
+                        // Show download button
+                        document.getElementById('downloadSection').style.display = 'block';
+                        
+                        // Store data for PDF download
+                        window.reviewData = data;
                     } else {
                         alert('Error: ' + (data.detail || 'Failed to review'));
                     }
@@ -341,6 +358,39 @@ async def root():
                 
                 resultDiv.classList.add('show');
             }
+            
+            async function downloadPDF() {
+                const data = window.reviewData;
+                if (!data) {
+                    alert('No review data available');
+                    return;
+                }
+                
+                try {
+                    const apiUrl = window.location.origin;
+                    const response = await fetch(apiUrl + '/pdf', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    if (response.ok) {
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'code_review_' + (data.pr_title || 'report').replace(/[^a-z0-9]/gi, '_').substring(0, 30) + '.pdf';
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                    } else {
+                        alert('Failed to generate PDF');
+                    }
+                } catch (error) {
+                    alert('Error downloading PDF: ' + error.message);
+                }
+            }
         </script>
     </body>
     </html>
@@ -376,6 +426,22 @@ async def trigger_review(request: ReviewRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Review failed: {str(e)}")
+
+
+@app.post("/pdf")
+async def generate_pdf(request: dict):
+    """Generate PDF from review data."""
+    try:
+        from utils.pdf_report import generate_review_pdf
+        pdf_bytes = generate_review_pdf(request)
+        from fastapi.responses import Response
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=code_review.pdf"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
 
 @app.post("/webhook")
